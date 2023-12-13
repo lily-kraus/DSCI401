@@ -1,0 +1,339 @@
+---
+title: "DSCI401 Project"
+author: "Lily Kraus"
+date: "2023-10-03"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This data can be found using the following link: <https://data.cityofchicago.org/Transportation/Traffic-Crashes-People/u6pd-qa9d>
+
+```{r}
+library(tidyverse)
+
+traffic_crashes <- read.csv("Traffic_Crashes.csv")
+
+traffic_crash_people <- read.csv("Traffic_Crashes_People.csv")
+
+traffic_crash_vehicles <- read.csv("Traffic_Crashes_Vehicles.csv")
+
+# Cleaning up the column names
+library(janitor)
+traffic_crashes <- traffic_crashes %>% clean_names()
+traffic_crash_people <- traffic_crash_people %>% clean_names()
+traffic_crash_vehicles <- traffic_crash_vehicles %>% clean_names()
+```
+
+```{r}
+# Select columns from traffic_crashes
+TC_selected_columns <- c(
+    'crash_record_id', 'weather_condition', 'lighting_condition',
+    'first_crash_type', 'trafficway_type', 'roadway_surface_cond',
+    'crash_type', 'damage', 'street_direction',
+    'injuries_fatal', 'injuries_total', 'injuries_incapacitating',
+    'crash_hour', 'crash_day_of_week', 'crash_month','injuries_non_incapacitating','traffic_control_device',
+    'prim_contributory_cause'
+)
+
+# Filtering the data based the selected columns
+TC_filt <- traffic_crashes[, TC_selected_columns]
+
+# Creating an injury indicator variable
+TC_filt <- TC_filt %>% 
+  mutate(total_injuries = (injuries_fatal +
+                          injuries_incapacitating +
+                          injuries_non_incapacitating +
+                          injuries_total)) %>%
+  mutate(injury_indicator = total_injuries > 1)
+
+# Create a variable called 'weather_indicator' for clear vs. unclear
+# 1 - clear, 0 - not clear
+TC_filt$weather_indicator <- as.integer(TC_filt$weather_condition == "CLEAR")
+head(TC_filt)
+
+# Define the grouping for road surface condition
+road_surface_grouping <- list(
+  'DRY' = 'Dry',
+  'WET' = 'Wet',
+  'UNKNOWN' = 'Other',
+  'SNOW OR SLUSH' = 'Wet',
+  'ICE' = 'Divided Road',
+  'OTHER' = 'Other',
+  'SAND, MUD, DIRT' = 'Other'
+)
+
+# Create a new column for grouped roadway surface condition
+TC_filt <- TC_filt %>%
+  mutate(grouped_roadway_surface = case_when(
+    roadway_surface_cond %in% names(road_surface_grouping) ~ unlist(road_surface_grouping[roadway_surface_cond]),
+    TRUE ~ as.character(roadway_surface_cond) 
+  ))
+
+# Define the grouping for trafficway type
+trafficway_grouping <- list(
+  'NOT DIVIDED' = 'Undivided Road',
+  'DIVIDED - W/MEDIAN (NOT RAISED)' = 'Divided Road',
+  'FOUR WAY' = 'Intersection',
+  'ONE-WAY' = 'Undivided Road',
+  'DIVIDED - W/MEDIAN BARRIER' = 'Divided Road',
+  'PARKING LOT' = 'Other',
+  'T-INTERSECTION' = 'Intersection',
+  'OTHER' = 'Other',
+  'ALLEY' = 'Other',
+  'CENTER TURN LANE' = 'Other',
+  'UNKNOWN' = 'Other',
+  'UNKNOWN INTERSECTION TYPE' = 'Intersection',
+  'RAMP' = 'Other',
+  'DRIVEWAY' = 'Other',
+  'FIVE POINT, OR MORE' = 'Intersection',
+  'Y-INTERSECTION' = 'Intersection',
+  'TRAFFIC ROUTE' = 'Other',
+  'NOT REPORTED' = 'Other',
+  'ROUNDABOUT' = 'Intersection',
+  'L-INTERSECTION' = 'Intersection'
+)
+
+# Create a new column for grouped trafficway type based on previously defined groupings. 
+TC_filt <- TC_filt %>%
+  mutate(grouped_trafficway_type = case_when(
+    trafficway_type %in% names(trafficway_grouping) ~ unlist(trafficway_grouping[trafficway_type]),
+    TRUE ~ as.character(trafficway_type)
+  ))
+
+# Defining the grouping for first_crash_type
+crash_grouping <- c(
+  'REAR END' = 'Rear-End',
+  'TURNING' = 'Turning',
+  'SIDESWIPE SAME DIRECTION ' = 'Sideswipe',
+  'ANGLE' = 'Angle',
+  'PARKED MOTOR VEHICLE' = 'Parked Vehicle',
+  'FIXED OBJECT' = 'Other',
+  'REAR TO FRONT' = 'Other',
+  'SIDESWIPE OPPOSITE DIRECTION' = 'Sideswipe',
+  'PEDESTRIAN' = 'Ped',
+  'HEAD ON' = 'Head on',
+  'REAR TO FRONT' = 'Other Rear',
+  'REAR TO SIDE' = 'Other Rear',
+  'PEDALCYCLIST' = 'Ped',
+  'OTHER OBJECT' = 'Other',
+  'REAR TO REAR' = 'Other Rear',
+  'OTHER NONCOLLISION' = 'Other',
+  'ANIMAL' = 'Other',
+  'OVERTURNED' = 'Other',
+  'TRAIN' = 'Other',
+  'OTHER OBJECT' = 'Other'
+)
+
+# Create a new column for grouped crash type
+TC_filt <- TC_filt %>%
+  mutate(grouped_crash = crash_grouping[first_crash_type])
+
+# Define the grouping for lighting condition
+lighting_grouping <- list(
+  'DAYLIGHT' = 'Light',
+  'DARKNESS, LIGHTED ROAD' = 'Dark',
+  'DARKNESS' = 'Dark',
+  'DUSK' = 'Crepuscular',
+  'DAWN' = 'Crepuscular',
+  'UNKNOWN' = 'Other'
+)
+
+# Create a new column for grouped lighting condition
+TC_filt <- TC_filt %>%
+  mutate(grouped_lighting = case_when(
+    lighting_condition %in% names(lighting_grouping) ~ unlist(lighting_grouping[lighting_condition]),
+    TRUE ~ as.character(lighting_condition) 
+  ))
+
+# Create a new column for primary contributory cause
+  cause_grouping <- c(
+    "ANIMAL" = "Animal",
+    "CELL PHONE USE OTHER THAN TEXTING" = "Distracted Driving",
+    "DISREGARDING OTHER TRAFFIC SIGNS" = "Disregarding Traffic Signals",
+    "DISREGARDING ROAD MARKINGS" = "Disregarding Road Markings",
+    "DISREGARDING STOP SIGN" = "Disregarding Traffic Signals",
+    "DISREGARDING TRAFFIC SIGNALS" = "Disregarding Traffic Signals",
+    "DISREGARDING YIELD SIGN" = "Disregarding Traffic Signals",
+    "DISTRACTION - FROM INSIDE VEHICLE" = "Distracted Driving",
+    "DISTRACTION - FROM OUTSIDE VEHICLE" = "Distracted Driving",
+    "DISTRACTION - OTHER ELECTRONIC DEVICE (NAVIGATION DEVICE, DVD PLAYER, ETC.)" = "Distracted Driving",
+    "DRIVING ON WRONG SIDE/WRONG WAY" = "Wrong Way Driving",
+    "DRIVING SKILLS/KNOWLEDGE/EXPERIENCE" = "Driving Skills/Experience",
+    "EQUIPMENT - VEHICLE CONDITION" = "Equipment Failure",
+    "EVASIVE ACTION DUE TO ANIMAL, OBJECT, NONMOTORIST" = "Evasive Action",
+    "EXCEEDING AUTHORIZED SPEED LIMIT" = "Speeding",
+    "EXCEEDING SAFE SPEED FOR CONDITIONS" = "Speeding",
+    "FAILING TO REDUCE SPEED TO AVOID CRASH" = "Following Too Closely",
+    "FAILING TO YIELD RIGHT-OF-WAY" = "Failure to Yield",
+    "FOLLOWING TOO CLOSELY" = "Following Too Closely",
+    "IMPROPER BACKING" = "Improper Maneuver",
+    "IMPROPER LANE USAGE" = "Improper Maneuver",
+    "IMPROPER OVERTAKING/PASSING" = "Improper Maneuver",
+    "IMPROPER TURNING/NO SIGNAL" = "Improper Maneuver",
+    "MOTORCYCLE ADVANCING LEGALLY ON RED LIGHT" = "Traffic Signal Disobedience",
+    "NOT APPLICABLE" = "Other",
+    "OBSTRUCTED CROSSWALKS" = "Obstruction",
+    "OPERATING VEHICLE IN ERRATIC, RECKLESS, CARELESS, NEGLIGENT OR AGGRESSIVE MANNER" = "Reckless Driving",
+    "PASSING STOPPED SCHOOL BUS" = "Bus-Related",
+    "PHYSICAL CONDITION OF DRIVER" = "Driver Condition",
+    "RELATED TO BUS STOP" = "Bus-Related",
+    "ROAD CONSTRUCTION/MAINTENANCE" = "Road Conditions",
+    "ROAD ENGINEERING/SURFACE/MARKING DEFECTS" = "Road Conditions",
+    "TEXTING" = "Distracted Driving",
+    "TURNING RIGHT ON RED" = "Traffic Signal Disobedience",
+    "UNABLE TO DETERMINE" = "Other",
+    "UNDER THE INFLUENCE OF ALCOHOL/DRUGS (USE WHEN ARREST IS EFFECTED)" = "Impaired Driving",
+    "VISION OBSCURED (SIGNS, TREE LIMBS, BUILDINGS, ETC.)" = "Vision Obstruction",
+    'WEATHER' = "Weather Conditions"
+  )
+
+# Create a new column for grouped primary contributory cause
+TC_filt <- TC_filt %>%
+  mutate(grouped_primary_cause = cause_grouping[prim_contributory_cause])
+
+# Defining grouping for traffic control device
+traffic_control_grouping <- c(
+  'BICYCLE CROSSING SIGN' = 'Yes',
+  'DELINEATORS' = 'Yes',
+  'FLASHING CONTROL SIGNAL' = 'Yes',
+  'LANE USE MARKING' = 'Yes',
+  'NO CONTROLS' = 'No',
+  'NO PASSING' = 'Yes',
+  'OTHER' = 'Yes',
+  'OTHER RAILROAD CROSSING' = 'Yes',
+  'OTHER REG. SIGN' = 'Yes',
+  'OTHER WARNING SIGN' = 'Yes',
+  'PEDESTRIAN CROSSING SIGN' = 'Yes',
+  'POLICE/FLAGMAN' = 'Yes',
+  'RAILROAD CROSSING GATE' = 'Yes',
+  'RR CROSSING SIGN' = 'Yes',
+  'SCHOOL ZONE' = 'Yes',
+  'STOP SIGN/FLASHER' = 'Yes',
+  'TRAFFIC SIGNAL' = 'Yes',
+  'UNKNOWN' = 'Unknown',
+  'YIELD' = 'Yes'
+)
+# Create a new column for grouped traffic control devices
+TC_filt <- TC_filt %>%
+  mutate(signal_present = traffic_control_grouping[traffic_control_device])
+
+head(TC_filt)
+names(TC_filt)
+
+# Selecting only desired columns
+TC_filt <- TC_filt %>% 
+  select(crash_record_id,
+         damage,
+         street_direction,
+         crash_hour,
+         crash_day_of_week,
+         crash_month,
+         injury_indicator,
+         weather_indicator,
+         grouped_roadway_surface,
+         grouped_trafficway_type,
+         grouped_crash,
+         grouped_lighting,
+         grouped_primary_cause,
+         signal_present)
+
+```
+
+```{r}
+# Wrangling the people data
+TC_people <- traffic_crash_people %>%
+  filter(age >= 15 & age <= 100) %>%
+  group_by(crash_record_id) %>%
+  summarize(num_passengers = sum(person_type == "PASSENGER"),
+            num_drivers = sum(person_type == "DRIVER"),
+            avg_driver_age = mean(ifelse(person_type == "DRIVER", age, NA), na.rm = TRUE)) %>%
+    mutate(avg_driver_age = case_when(avg_driver_age == "NaN" ~ NA))
+```
+
+```{r}
+# Wrangling the vehicle data and joining it with the people data
+TC_PV <- traffic_crash_vehicles %>%
+  filter(vehicle_year <= 2023) %>%
+  mutate(vehicle_age = 2023 - vehicle_year) %>%
+  group_by(crash_record_id) %>%
+  summarise(num_units = n_distinct(crash_unit_id),
+            avg_vehicle_age = round(mean(vehicle_age))) %>%
+  left_join(TC_people, by = "crash_record_id") 
+```
+
+```{r}
+# Taking the joined people and vehicle data and joining it with the traffic crash data
+
+TC_merg <- TC_filt %>%
+            left_join(TC_PV, by = "crash_record_id") 
+```
+
+```{r}
+# Using the mice package to impute missing values in the filtered, merged data
+library(mice)
+
+# Look at which columns have NA values
+na_cols <- colSums(is.na(TC_merg)) > 0
+
+# Display columns with NAs
+print(names(na_cols[na_cols]))
+
+set.seed(4901)
+
+# Create a MICE imputation object
+# pmm - Involves predicting the missing values based on observed values and then matching the predicted values with observed values from similar instances.This process is akin to creating a bootstrap-like, empirical distribution for a given observation. 
+imp <- mice(TC_merg[,na_cols], method = 'pmm', m = 5, seed = 4901)
+
+# Impute missing values
+TC_impute <- complete(imp)
+
+# Replace missing values in TC_merg with imputed values from TC_impute
+TC_merg[, names(na_cols)[na_cols]] <- TC_impute[, names(na_cols)[na_cols]]
+
+head(TC_merg)
+```
+
+```{r}
+# Split the data into a testing and training set
+# Set a seed for reproducibility
+set.seed(4901)
+
+# Create an index for train/test split (80% training, 20% testing)
+index_train <- sample(1:nrow(TC_impute), 0.8 * nrow(TC_impute))
+data_train <- TC_impute[index_train, ]
+data_test <- TC_impute[-index_train, ]
+
+# Look at the distribution of the injury_indicator variable in the training data
+table_result <- table(data_train$injury_indicator)
+
+# Calculate percentages
+percent_true <- prop.table(table_result)["TRUE"] * 100
+cat("Percent TRUE:", percent_true, "%\n")
+
+percent_false <- prop.table(table_result)["FALSE"] * 100
+cat("Percent FALSE:", percent_false, "%\n")
+```
+
+```{r}
+# Fit a logistic regression model
+log_model <- glm(injury_indicator ~ ., family = binomial, data = data_train)
+
+# Summarize the model
+model_summary <- summary(log_model)
+
+# Calculating percent change
+percent_change <- (exp(coefficients) - 1) * 100
+
+# Combining predictor names, coefficients, and percent change into a data frame
+result_table <- data.frame(
+  Predictor = names(coefficients),
+  Coefficient = coefficients,
+  Percent_Change = percent_change
+)
+
+```
