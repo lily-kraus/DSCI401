@@ -11,7 +11,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This data can be found using the following link: <https://data.cityofchicago.org/Transportation/Traffic-Crashes-People/u6pd-qa9d>
+This data can be found using the following link: <https://data.cityofchicago.org/Transportation/Traffic-Crashes-Crashes/85ca-t3if/about_data>
 
 ```{r}
 library(tidyverse)
